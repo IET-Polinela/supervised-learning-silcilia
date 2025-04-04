@@ -32,5 +32,5 @@ for i, feature in enumerate(features_to_plot):
     axes[row, col].legend()
 
 plt.tight_layout(rect=[0, 0, 1, 0.95])
-plt.savefig("feature_scalling.png")
+plt.savefig("feature_scalling1.png")
 plt.show()
