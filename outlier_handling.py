@@ -1,10 +1,10 @@
-import pandas as pd
+import pandas as pd 
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Load dataset
-file_path = "train.csv" 
+file_path = "train.csv"  # Sesuaikan path jika berbeda
 df = pd.read_csv(file_path)
 
 # Menampilkan informasi awal dataset
@@ -22,7 +22,12 @@ def detect_outliers_iqr(data, feature):
 
 # Identifikasi outlier untuk semua fitur numerik
 numerical_features = df.select_dtypes(include=[np.number]).columns.tolist()
-outliers = {feature: detect_outliers_iqr(df, feature) for feature in numerical_features}
+outlier_counts = {feature: detect_outliers_iqr(df, feature).shape[0] for feature in numerical_features}
+
+# Menampilkan jumlah outlier per fitur
+print("Jumlah Outlier per Fitur (Metode IQR):")
+for feature, count in outlier_counts.items():
+    print(f"{feature}: {count}")
 
 # Menghapus outlier dari dataset
 def remove_outliers(data, feature):
@@ -53,6 +58,15 @@ for i, col in enumerate(numerical_features, 1):
     plt.title(f"After - {col}")
 plt.tight_layout()
 plt.savefig("outlier_handling.png")
+plt.show()
+
+# Visualisasi Histogram Sebelum & Sesudah Penghapusan Outlier (contoh pada fitur pertama)
+plt.figure(figsize=(12, 5))
+feature_sample = numerical_features[0]
+sns.histplot(df[feature_sample], bins=30, color='red', kde=True, label="Before")
+sns.histplot(df_no_outliers[feature_sample], bins=30, color='blue', kde=True, label="After")
+plt.title(f"Distribusi {feature_sample} Sebelum & Sesudah Penghapusan Outlier")
+plt.legend()
 plt.show()
 
 # Output jumlah data sebelum dan sesudah penghapusan outlier
