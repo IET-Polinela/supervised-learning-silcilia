@@ -1,4 +1,3 @@
-# 📌 Import Library
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,105 +11,109 @@ from sklearn.metrics import mean_squared_error, r2_score
 # 1️⃣ Load Dataset
 df = pd.read_csv("train.csv")
 
-# 🔥 Solusi: Ubah semua nama kolom menjadi string
-df.columns = df.columns.astype(str)
-
 # 2️⃣ Pisahkan fitur numerik dan kategori
-numerical_features = df.select_dtypes(include=[np.number]).columns.tolist()
-categorical_features = df.select_dtypes(exclude=[np.number]).columns.tolist()
+numerical_features = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+categorical_features = df.select_dtypes(include=['object']).columns.tolist()
 
-# 3️⃣ Imputasi (Mengisi NaN)
-imputer_num = SimpleImputer(strategy="mean")
-imputer_cat = SimpleImputer(strategy="most_frequent")
+# 3️⃣ Tangani Missing Values
+imputer_num = SimpleImputer(strategy='mean')  # Mean untuk fitur numerik
+imputer_cat = SimpleImputer(strategy='most_frequent')  # Mode untuk fitur kategori
 
 df[numerical_features] = imputer_num.fit_transform(df[numerical_features])
 df[categorical_features] = imputer_cat.fit_transform(df[categorical_features])
 
-# 4️⃣ Encoding fitur kategori
-encoder = OneHotEncoder(drop="first", sparse_output=False, handle_unknown="ignore")
+# 4️⃣ Encoding Fitur Kategori
+encoder = OneHotEncoder(drop='first', sparse_output=False, handle_unknown='ignore')
+encoded_categorical = encoder.fit_transform(df[categorical_features])
+df_encoded = pd.DataFrame(encoded_categorical, columns=encoder.get_feature_names_out(categorical_features))
 
-df_encoded = pd.DataFrame(encoder.fit_transform(df[categorical_features]))
-df_encoded[numerical_features] = df[numerical_features].reset_index(drop=True)
+# Gabungkan dataset yang sudah di-encode
+df_final = pd.concat([df[numerical_features], df_encoded], axis=1)
 
-# 🔥 Solusi: Ubah kembali semua nama kolom setelah encoding
-df_encoded.columns = df_encoded.columns.astype(str)
-
-# 5️⃣ Fungsi untuk menghapus outlier dengan IQR
-def remove_outliers_iqr(data, features, threshold=1.5):
+# 5️⃣ Menghapus Outlier dengan IQR
+def remove_outliers_iqr(data, features):
     Q1 = data[features].quantile(0.25)
     Q3 = data[features].quantile(0.75)
     IQR = Q3 - Q1
-    lower_bound = Q1 - (threshold * IQR)
-    upper_bound = Q3 + (threshold * IQR)
-    return data[~((data[features] < lower_bound) | (data[features] > upper_bound)).any(axis=1)]
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    return data[(data[features] >= lower_bound) & (data[features] <= upper_bound)].dropna()
 
-# 6️⃣ Hapus outlier
-df_no_outliers = remove_outliers_iqr(df_encoded, numerical_features)
+df_no_outliers = remove_outliers_iqr(df_final, numerical_features)
 
-# 7️⃣ Simpan dataset yang telah diproses
-df_encoded.to_csv("dataset_encoded.csv", index=False)  # Dataset setelah encoding
-df_no_outliers.to_csv("dataset_without_outliers.csv", index=False)  # Dataset setelah menghapus outlier
+# 6️⃣ Simpan Dataset yang Sudah Diproses
+df_no_outliers.to_csv("dataset_without_outliers.csv", index=False)
+df_final.to_csv("dataset_encoded.csv", index=False)
 
-# 8️⃣ Scaling data
-scaler = StandardScaler()
+# 7️⃣ Persiapan Data untuk Model
+X_outlier = df_final.drop(columns=["SalePrice"])  # Dataset dengan outlier
+y_outlier = df_final["SalePrice"]
 
-X_outlier = df_encoded.drop(columns=["SalePrice"])
-y_outlier = df_encoded["SalePrice"]
-
-X_cleaned = df_no_outliers.drop(columns=["SalePrice"])
+X_cleaned = df_no_outliers.drop(columns=["SalePrice"])  # Dataset tanpa outlier
 y_cleaned = df_no_outliers["SalePrice"]
 
-X_outlier_scaled = pd.DataFrame(scaler.fit_transform(X_outlier), columns=X_outlier.columns)
-X_cleaned_scaled = pd.DataFrame(scaler.fit_transform(X_cleaned), columns=X_cleaned.columns)
-
-# 🔟 Train & Evaluate Model
-def train_and_evaluate(X_train, X_test, y_train, y_test, title):
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-
-    print(f"🔹 {title} 🔹")
-    print(f"📌 MSE: {mse:.2f}")
-    print(f"📌 R² Score: {r2:.4f}")
-    print("-" * 40)
-
-    # 📊 Scatter Plot
-    plt.figure(figsize=(15, 5))
-    
-    plt.subplot(1, 3, 1)
-    sns.scatterplot(x=y_test, y=y_pred, alpha=0.5)
-    plt.xlabel("Actual SalePrice")
-    plt.ylabel("Predicted SalePrice")
-    plt.title(f"Scatter Plot ({title})")
-
-    # 📊 Residual Plot
-    residuals = y_test - y_pred
-    plt.subplot(1, 3, 2)
-    sns.scatterplot(x=y_pred, y=residuals, alpha=0.5)
-    plt.axhline(y=0, color="red", linestyle="--")
-    plt.xlabel("Predicted SalePrice")
-    plt.ylabel("Residuals")
-    plt.title(f"Residual Plot ({title})")
-
-    # 📊 Distribusi Residual
-    plt.subplot(1, 3, 3)
-    sns.histplot(residuals, kde=True)
-    plt.xlabel("Residuals")
-    plt.title(f"Distribusi Residual ({title})")
-    plt.savefig("Linear Regression.png", dpi=300, bbox_inches='tight')
-    plt.show()
-    
-
-
-# 🔥 Split data menjadi train & test
+# 8️⃣ Split Data
 X_train_outlier, X_test_outlier, y_train_outlier, y_test_outlier = train_test_split(X_outlier, y_outlier, test_size=0.2, random_state=42)
 X_train_cleaned, X_test_cleaned, y_train_cleaned, y_test_cleaned = train_test_split(X_cleaned, y_cleaned, test_size=0.2, random_state=42)
-X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled = train_test_split(X_cleaned_scaled, y_cleaned, test_size=0.2, random_state=42)
 
-# 🔥 Evaluasi Model
-train_and_evaluate(X_train_outlier, X_test_outlier, y_train_outlier, y_test_outlier, "Dataset dengan Outlier")
-train_and_evaluate(X_train_cleaned, X_test_cleaned, y_train_cleaned, y_test_cleaned, "Dataset Tanpa Outlier")
-train_and_evaluate(X_train_scaled, X_test_scaled, y_train_scaled, y_test_scaled, "Dataset Tanpa Outlier & Scaling")
+# 9️⃣ Train Model
+model_outlier = LinearRegression()
+model_cleaned = LinearRegression()
+
+model_outlier.fit(X_train_outlier, y_train_outlier)
+model_cleaned.fit(X_train_cleaned, y_train_cleaned)
+
+# 🔟 Prediksi
+y_pred_outlier = model_outlier.predict(X_test_outlier)
+y_pred_cleaned = model_cleaned.predict(X_test_cleaned)
+
+# 1️⃣1️⃣ Evaluasi Model
+mse_outlier = mean_squared_error(y_test_outlier, y_pred_outlier)
+r2_outlier = r2_score(y_test_outlier, y_pred_outlier)
+
+mse_cleaned = mean_squared_error(y_test_cleaned, y_pred_cleaned)
+r2_cleaned = r2_score(y_test_cleaned, y_pred_cleaned)
+
+print("🔹 Dataset dengan Outlier 🔹")
+print(f"📌 MSE: {mse_outlier:.2f}")
+print(f"📌 R² Score: {r2_outlier:.4f}")
+
+print("\n🔹 Dataset Tanpa Outlier 🔹")
+print(f"📌 MSE: {mse_cleaned:.2f}")
+print(f"📌 R² Score: {r2_cleaned:.4f}")
+
+# 1️⃣2️⃣ Visualisasi Hasil
+plt.figure(figsize=(15, 5))
+
+# Scatter Plot: Prediksi vs Aktual
+plt.subplot(1, 3, 1)
+plt.scatter(y_test_outlier, y_pred_outlier, alpha=0.5, label="Dengan Outlier", color="red")
+plt.scatter(y_test_cleaned, y_pred_cleaned, alpha=0.5, label="Tanpa Outlier", color="blue")
+plt.plot([min(y_test_outlier), max(y_test_outlier)], [min(y_test_outlier), max(y_test_outlier)], 'k--')
+plt.xlabel("Nilai Aktual")
+plt.ylabel("Prediksi")
+plt.legend()
+plt.title("Scatter Plot: Prediksi vs Aktual")
+
+# Residual Plot
+plt.subplot(1, 3, 2)
+sns.histplot(y_test_outlier - y_pred_outlier, bins=50, color="red", alpha=0.6, label="Dengan Outlier", kde=True)
+sns.histplot(y_test_cleaned - y_pred_cleaned, bins=50, color="blue", alpha=0.6, label="Tanpa Outlier", kde=True)
+plt.xlabel("Residual")
+plt.ylabel("Frekuensi")
+plt.legend()
+plt.title("Distribusi Residual")
+
+# Residual vs Prediksi
+plt.subplot(1, 3, 3)
+plt.scatter(y_pred_outlier, y_test_outlier - y_pred_outlier, alpha=0.5, label="Dengan Outlier", color="red")
+plt.scatter(y_pred_cleaned, y_test_cleaned - y_pred_cleaned, alpha=0.5, label="Tanpa Outlier", color="blue")
+plt.axhline(0, color='black', linestyle='--')
+plt.xlabel("Prediksi")
+plt.ylabel("Residual")
+plt.legend()
+plt.title("Residual vs Prediksi")
+
+# Simpan hasil visualisasi sebagai PNG
+plt.savefig("linear_regression1.png", dpi=300, bbox_inches='tight')
+plt.show()
